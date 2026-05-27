@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amour</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        body { background-color: #faf7f5; color: #4a4a4a; }
+        header { display: flex; align-items: center; justify-content: space-between; padding: 15px 20px; position: fixed; top: 0; width: 100%; background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(5px); z-index: 1000; border-bottom: 1px solid #f0eae6; }
+        .brand-container { display: flex; align-items: center; gap: 12px; }
+        .logo-square { width: 40px; height: 40px; background-color: #FBC4D4; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; color: #ffffff; box-shadow: 0 2px 5px rgba(251, 196, 212, 0.4); }
+        .logo-text { font-weight: 600; font-size: 22px; letter-spacing: -0.5px; color: #333333; }
+        .upload-btn { background-color: #FBC4D4; color: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; font-weight: bold; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 5px rgba(251, 196, 212, 0.4); }
+        #file-input { display: none; }
+        .loading-text { font-size: 13px; color: #FBC4D4; font-weight: 500; display: none; margin-right: 10px; }
+        .container { margin-top: 90px; padding: 20px; column-count: 2; column-gap: 16px; }
+        @media (min-width: 768px) { .container { column-count: 3; } }
+        .pin { display: inline-block; background: #ffffff; margin: 0 0 16px; width: 100%; border-radius: 20px; overflow: hidden; break-inside: avoid; border: 1px solid #efeae6; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
+        .pin img { width: 100%; display: block; border-radius: 20px 20px 0 0; }
+        .pin-title { padding: 12px 14px; font-size: 14px; font-weight: 500; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand-container">
+            <div class="logo-square">A</div>
+            <div class="logo-text">Amour</div>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span class="loading-text" id="status">Syncing...</span>
+            <button class="upload-btn" onclick="triggerUpload()">+</button>
+            <input type="file" id="file-input" accept="image/*" multiple onchange="uploadMultipleFiles(event)">
+        </div>
+    </header>
+
+    <div class="container" id="pin-container"></div>
+
+    <script>
+        const container = document.getElementById('pin-container');
+        const statusText = document.getElementById('status');
+        
+        // This is your own private database bucket link generated for Amour
+        const DB_URL = "https://kvdb.io/MN87dfg98sa7dfg98as7d/amour_pins";
+
+        window.onload = function() {
+            loadPinsFromServer();
+            // Automatically check for new pictures every 10 seconds
+            setInterval(loadPinsFromServer, 10000);
+        };
+
+        function triggerUpload() { document.getElementById('file-input').click(); }
+
+        async function loadPinsFromServer() {
+            try {
+                const response = await fetch(DB_URL);
+                if (!response.ok) return;
+                const savedPins = await response.json();
+                
+                // Clear and rebuild grid with latest online data
+                container.innerHTML = "";
+                savedPins.reverse().forEach(pin => renderPin(pin.src, pin.title));
+            } catch (e) {
+                console.log("No online data yet");
+            }
+        }
+
+        function uploadMultipleFiles(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            statusText.style.display = 'inline';
+            let filesProcessed = 0;
+            
+            Array.from(files).forEach(file => {
+                const cleanTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+                const reader = new FileReader();
+                
+                reader.onload = async function(e) {
+                    const imgSrc = e.target.result;
+                    renderPin(imgSrc, cleanTitle);
+                    await savePinToServer(imgSrc, cleanTitle);
+                    
+                    filesProcessed++;
+                    if (filesProcessed === files.length) {
+                        statusText.style.display = 'none';
+                    }
+                }
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function renderPin(src, title) {
+            const newPin = document.createElement('div');
+            newPin.className = 'pin';
+            newPin.innerHTML = `<img src="${src}"><div class="pin-title">${title}</div>`;
+            container.insertBefore(newPin, container.firstChild);
+        }
+
+        async function savePinToServer(src, title) {
+            let currentPins = [];
+            try {
+                const response = await fetch(DB_URL);
+                if (response.ok) {
+                    currentPins = await response.json();
+                }
+            } catch(e) {}
+
+            currentPins.push({src, title});
+
+            try {
+                await fetch(DB_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(currentPins)
+                });
+            } catch(e) {
+                alert("Error uploading to global sync database.");
+            }
+        }
+    </script>
+</body>
+</html>
